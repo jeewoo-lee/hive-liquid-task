@@ -627,6 +627,34 @@ class StandardFiltersTest < Minitest::Test
     end
   end
 
+  def test_date_does_not_cache_dynamic_keywords_case_insensitively
+    values = [
+      Time.utc(2026, 3, 30),
+      Time.utc(2026, 3, 31),
+      Time.utc(2026, 4, 1),
+      Time.utc(2026, 4, 2),
+    ]
+    original_to_date = Liquid::Utils.method(:to_date)
+    fake_to_date = lambda do |obj|
+      case obj
+      when "Today", "NOW"
+        values.shift
+      else
+        original_to_date.call(obj)
+      end
+    end
+
+    Liquid::Utils.singleton_class.send(:define_method, :to_date, fake_to_date)
+    begin
+      assert_equal("2026-03-30", @filters.date("Today", "%Y-%m-%d"))
+      assert_equal("2026-03-31", @filters.date("Today", "%Y-%m-%d"))
+      assert_equal("2026-04-01", @filters.date("NOW", "%Y-%m-%d"))
+      assert_equal("2026-04-02", @filters.date("NOW", "%Y-%m-%d"))
+    ensure
+      Liquid::Utils.singleton_class.send(:define_method, :to_date, original_to_date)
+    end
+  end
+
   def test_first_last
     assert_equal(1, @filters.first([1, 2, 3]))
     assert_equal(3, @filters.last([1, 2, 3]))

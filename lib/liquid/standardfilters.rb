@@ -812,11 +812,15 @@ module Liquid
       # Cache stable input/format pairs globally so repeated Time.parse/strftime
       # work can be skipped. Keep "now"/"today" uncached so the filter remains
       # time-sensitive.
-      case input
-      when 'now', 'today'
+      normalized_input = input.downcase if input.is_a?(String)
+
+      if normalized_input == 'now' || normalized_input == 'today'
         date = Utils.to_date(input)
         return input unless date
         return date.strftime(str_format)
+      end
+
+      case input
       when String, Integer
         format_cache = DATE_FILTER_CACHE[str_format]
         if format_cache && format_cache.key?(input)

@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
 # Evaluate Liquid on the same benchmark style used in Shopify/liquid PR #2056:
-# 974 unit tests must pass, then performance/bench_quick.rb runs 3 times and the
+# 975 unit tests must pass, then performance/bench_quick.rb runs 3 times and the
 # best combined parse+render time is reported.
 set -uo pipefail
 
 cd "$(dirname "$0")/.."
 
 summary() {
-    local combined_us="${1:-ERROR}"
-    local parse_us="${2:-0}"
-    local render_us="${3:-0}"
-    local allocations="${4:-0}"
-    local correct="${5:-0}"
-    local total="${6:-0}"
-    local valid="${7:-false}"
+    local efficiency_score="${1:-ERROR}"
+    local combined_us="${2:-ERROR}"
+    local parse_us="${3:-0}"
+    local render_us="${4:-0}"
+    local allocations="${5:-0}"
+    local correct="${6:-0}"
+    local total="${7:-0}"
+    local valid="${8:-false}"
     echo "---"
+    printf "efficiency_score: %s\n" "$efficiency_score"
     printf "combined_us:      %s\n" "$combined_us"
     printf "parse_us:         %s\n" "$parse_us"
     printf "render_us:        %s\n" "$render_us"
@@ -49,7 +51,7 @@ find_ruby_34() {
 
 if ! RUBY_BIN="$(find_ruby_34)"; then
     echo "ERROR: Ruby 3.4 not found. Run: bash prepare.sh" >&2
-    summary "ERROR" "0" "0" "0" "0" "0" "false"
+    summary "ERROR" "ERROR" "0" "0" "0" "0" "0" "false"
     exit 0
 fi
 
@@ -57,20 +59,20 @@ export PATH="$(dirname "$RUBY_BIN"):$PATH"
 
 if ! "$RUBY_BIN" --yjit -e 'exit(defined?(RubyVM::YJIT) && RubyVM::YJIT.enabled? ? 0 : 1)'; then
     echo "ERROR: Ruby 3.4 with YJIT support is required. Run: bash prepare.sh" >&2
-    summary "ERROR" "0" "0" "0" "0" "0" "false"
+    summary "ERROR" "ERROR" "0" "0" "0" "0" "0" "false"
     exit 0
 fi
 
 if ! bundle check >/dev/null 2>&1; then
     echo "ERROR: Ruby gems are missing. Run: bash prepare.sh" >&2
-    summary "ERROR" "0" "0" "0" "0" "0" "false"
+    summary "ERROR" "ERROR" "0" "0" "0" "0" "0" "false"
     exit 0
 fi
 
 TEST_LOG="$(mktemp)"
 trap 'rm -f "$TEST_LOG"' EXIT
 
-echo "Running 974-test base gate..." >&2
+echo "Running 975-test base gate..." >&2
 TEST_EXIT=0
 bundle exec ruby eval/run_base_test.rb >"$TEST_LOG" 2>&1 || TEST_EXIT=$?
 
@@ -90,7 +92,7 @@ fi
 if [ "$TEST_EXIT" -ne 0 ]; then
     echo "ERROR: Unit tests failed." >&2
     tail -n 40 "$TEST_LOG" >&2
-    summary "ERROR" "0" "0" "0" "$CORRECT" "$TOTAL" "false"
+    summary "ERROR" "ERROR" "0" "0" "0" "$CORRECT" "$TOTAL" "false"
     exit 0
 fi
 
@@ -110,7 +112,7 @@ for i in 1 2 3; do
     if [ -z "$PARSE_US" ] || [ -z "$RENDER_US" ] || [ -z "$COMBINED_US" ] || [ -z "$ALLOCATIONS" ]; then
         echo "ERROR: Benchmark output was not parseable." >&2
         echo "$OUT" >&2
-        summary "ERROR" "0" "0" "0" "$CORRECT" "$TOTAL" "false"
+        summary "ERROR" "ERROR" "0" "0" "0" "$CORRECT" "$TOTAL" "false"
         exit 0
     fi
 
@@ -124,4 +126,8 @@ for i in 1 2 3; do
     fi
 done
 
-summary "$BEST_COMBINED" "$BEST_PARSE" "$BEST_RENDER" "$BEST_ALLOC" "$CORRECT" "$TOTAL" "true"
+BASELINE_COMBINED_US=18032
+BASELINE_ALLOCATIONS=24530
+EFFICIENCY_SCORE="$(awk -v bc="$BASELINE_COMBINED_US" -v ba="$BASELINE_ALLOCATIONS" -v cu="$BEST_COMBINED" -v al="$BEST_ALLOC" 'BEGIN { printf "%.6f", (bc * ba) / (cu * al) }')"
+
+summary "$EFFICIENCY_SCORE" "$BEST_COMBINED" "$BEST_PARSE" "$BEST_RENDER" "$BEST_ALLOC" "$CORRECT" "$TOTAL" "true"

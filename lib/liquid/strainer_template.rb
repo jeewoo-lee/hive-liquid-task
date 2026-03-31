@@ -28,7 +28,7 @@ module Liquid
       end
 
       def invokable?(method)
-        filter_methods.include?(method.to_s)
+        filter_methods.include?(method.is_a?(String) ? method : method.to_s)
       end
 
       def inherited(subclass)

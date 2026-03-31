@@ -30,18 +30,22 @@ module Liquid
     end
 
     def parse_with_selected_parser(markup)
-      case parse_context.error_mode
-      when :rigid   then rigid_warn && strict2_parse_with_error_context(markup)
-      when :strict2 then strict2_parse_with_error_context(markup)
-      when :strict  then strict_parse_with_error_context(markup)
-      when :lax     then lax_parse(markup)
-      when :warn
+      mode = parse_context.error_mode
+      if mode == :lax
+        lax_parse(markup)
+      elsif mode == :warn
         begin
           strict2_parse_with_error_context(markup)
         rescue SyntaxError => e
           parse_context.warnings << e
           lax_parse(markup)
         end
+      elsif mode == :strict
+        strict_parse_with_error_context(markup)
+      elsif mode == :strict2
+        strict2_parse_with_error_context(markup)
+      elsif mode == :rigid
+        rigid_warn && strict2_parse_with_error_context(markup)
       end
     end
 
