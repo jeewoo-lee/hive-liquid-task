@@ -183,16 +183,34 @@ module Liquid
       # return this as the result.
       return context.evaluate(left) if op.nil?
 
-      left  = Liquid::Utils.to_liquid_value(context.evaluate(left))
-      right = Liquid::Utils.to_liquid_value(context.evaluate(right))
+      left_val  = context.evaluate(left)
+      right_val = context.evaluate(right)
+
+      # Fast path for == (most common operator): skip to_liquid_value for primitives
+      if op == '=='
+        l = left_val
+        unless l.instance_of?(String) || l.instance_of?(Integer) || l.instance_of?(Float) ||
+            l == true || l == false || l.nil?
+          l = Liquid::Utils.to_liquid_value(l)
+        end
+        r = right_val
+        unless r.instance_of?(String) || r.instance_of?(Integer) || r.instance_of?(Float) ||
+            r == true || r == false || r.nil?
+          r = Liquid::Utils.to_liquid_value(r)
+        end
+        return equal_variables(l, r)
+      end
+
+      left_val  = Liquid::Utils.to_liquid_value(left_val)
+      right_val = Liquid::Utils.to_liquid_value(right_val)
 
       operation = self.class.operators[op] || raise(Liquid::ArgumentError, "Unknown operator #{op}")
 
       if operation.respond_to?(:call)
-        operation.call(self, left, right)
-      elsif left.respond_to?(operation) && right.respond_to?(operation) && !left.is_a?(Hash) && !right.is_a?(Hash)
+        operation.call(self, left_val, right_val)
+      elsif left_val.respond_to?(operation) && right_val.respond_to?(operation) && !left_val.is_a?(Hash) && !right_val.is_a?(Hash)
         begin
-          left.send(operation, right)
+          left_val.send(operation, right_val)
         rescue ::ArgumentError => e
           raise Liquid::ArgumentError, e.message
         end

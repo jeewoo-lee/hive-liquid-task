@@ -111,18 +111,37 @@ module Liquid
     end
 
     def invoke(method, *args)
-      strainer.invoke(method, *args).to_liquid
+      result = strainer.invoke(method, *args)
+      # Skip to_liquid for types that return self
+      case result
+      when String, Integer, Float, NilClass, TrueClass, FalseClass, Array, Hash
+        result
+      else
+        result.to_liquid
+      end
     end
 
     # Fast path for single-argument filter invocation (the most common case:
     # {{ value | filter }}) — avoids *args splat allocation.
     def invoke_single(method, input)
-      strainer.invoke_single(method, input).to_liquid
+      result = strainer.invoke_single(method, input)
+      case result
+      when String, Integer, Float, NilClass, TrueClass, FalseClass, Array, Hash
+        result
+      else
+        result.to_liquid
+      end
     end
 
     # Fast path for two-argument filter invocation (e.g. {{ value | default: 'x' }})
     def invoke_two(method, input, arg1)
-      strainer.invoke_two(method, input, arg1).to_liquid
+      result = strainer.invoke_two(method, input, arg1)
+      case result
+      when String, Integer, Float, NilClass, TrueClass, FalseClass, Array, Hash
+        result
+      else
+        result.to_liquid
+      end
     end
 
     # Push new local scope on the stack. use <tt>Context#stack</tt> instead
@@ -204,7 +223,13 @@ module Liquid
     end
 
     def evaluate(object)
-      object.respond_to?(:evaluate) ? object.evaluate(self) : object
+      # Fast path: primitive types never respond to :evaluate
+      case object
+      when String, Integer, Float, NilClass, TrueClass, FalseClass
+        object
+      else
+        object.respond_to?(:evaluate) ? object.evaluate(self) : object
+      end
     end
 
     # Fetches an object starting at the local scope and then moving up the hierachy
