@@ -15,14 +15,16 @@ The eval runs:
 
 1. the 975-test base suite
 2. `performance/bench_quick.rb` three times with YJIT enabled
-3. best-of-3 reporting for `efficiency_score`, `combined_us`, `parse_us`, `render_us`, and `allocations`
+3. a best-of-3 PR baseline rerun from `reference-pr/`
+4. a best-of-3 candidate benchmark
+5. reporting for `efficiency_score`, `pr_baseline_combined_us`, `pr_baseline_allocations`, `combined_us`, `parse_us`, `render_us`, and `allocations`
 
 ## Baseline
 
 - PR author report: `combined_us=3534`, `parse_us=2353`, `render_us=1146`, `allocations=24530`
-- PR-head local baseline for this task: `efficiency_score=1.000000`, `combined_us=18032`, `parse_us=4585`, `render_us=13447`, `allocations=24530`
+- PR baseline is recomputed from `reference-pr/` on every eval, so `efficiency_score=1.0` always means “matches the PR branch on this machine.”
 - Shopify PR summary reference only: `main=7469 combined / 62620 allocations`, `this PR=3534 combined / 24530 allocations`
-- Current verified improved run: `efficiency_score=2.868395`, `combined_us=6141`, `parse_us=3329`, `render_us=2812`, `allocations=24174`, `correct=975`, `total=975`
+- Recent verified improved run on this machine: `efficiency_score=2.188250`, `pr_baseline_combined_us=13918`, `combined_us=6454`, `parse_us=3505`, `render_us=2949`, `allocations=24174`, `correct=975`, `total=975`
 
 Only compare benchmark numbers from the same environment.
 

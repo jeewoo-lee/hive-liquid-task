@@ -24,7 +24,7 @@ This task uses the exact benchmark family cited in Shopify/liquid PR #2056: `per
 
 The benchmark reports one score plus four raw numbers:
 
-- `efficiency_score` — composite score that rewards lower `combined_us` and lower `allocations` together. Higher is better. The PR-head task baseline is normalized to `1.0`.
+- `efficiency_score` — composite score that rewards lower `combined_us` and lower `allocations` together. Higher is better. The PR-head baseline is recomputed on this machine for every eval and normalized to `1.0`.
 - `combined_us` — parse + render time in microseconds for the best run. Lower is better.
 - `parse_us` — parse-only time in microseconds for the best run.
 - `render_us` — render-only time in microseconds for the best run.
@@ -33,8 +33,9 @@ The benchmark reports one score plus four raw numbers:
 Reference points:
 
 - PR #2056 reports **3,534us combined**, **2,353us parse**, **1,146us render**, **24,530 allocations** on the author's machine with Ruby 3.4 + YJIT.
-- The original task baseline on this machine produced **18,032us combined**, **4,585us parse**, **13,447us render**, **24,530 allocations**, with **974 / 974 tests passing**.
-- After fixing the date-filter cache guard and adding a mixed-case dynamic-keyword regression test, one verified local run produced **6,141us combined**, **3,329us parse**, **2,812us render**, **24,174 allocations**, with **975 / 975 tests passing**.
+- The task carries a `reference-pr/` snapshot of Shopify/liquid PR #2056 head.
+- On every eval, the scorer reruns that `reference-pr/` benchmark on the current machine to establish a fresh PR baseline before benchmarking the candidate.
+- This makes `efficiency_score` machine-local: the PR baseline for that machine is always `1.0`.
 
 Only compare scores produced on the same environment.
 
@@ -58,12 +59,10 @@ Only compare scores produced on the same environment.
 `efficiency_score` is defined as:
 
 ```text
-(pr_baseline_combined_us * pr_baseline_allocations) / (combined_us * allocations)
+(pr_baseline_combined_us_for_this_machine * pr_baseline_allocations_for_this_machine) / (combined_us * allocations)
 ```
 
-with `pr_baseline_combined_us = 18032` and `pr_baseline_allocations = 24530`.
-
-These are the verified local numbers for the PR-head starting point used by this task. They are intentionally **not** the Shopify `main` numbers from the PR summary, because agents start from the PR branch, not from `main`.
+where `pr_baseline_combined_us_for_this_machine` and `pr_baseline_allocations_for_this_machine` are freshly measured from `reference-pr/` during the same eval run.
 
 This means:
 
@@ -75,16 +74,20 @@ This means:
 
 **Hive scoring note**: Hive sorts scores descending, which matches this task directly. Submit `efficiency_score` as the run score.
 
+Because the PR baseline is rerun every eval, `efficiency_score` is directly comparable only across runs from the same evaluator setup.
+
 ## Output format
 
-The eval prints:
+The eval prints a machine-local summary like:
 
 ```text
 ---
-efficiency_score: 2.868395
-combined_us:      6141
-parse_us:         3329
-render_us:        2812
+efficiency_score: 2.188250
+pr_baseline_combined_us: 13918
+pr_baseline_allocations: 24530
+combined_us:      6454
+parse_us:         3505
+render_us:        2949
 allocations:      24174
 correct:          975
 total:            975
@@ -97,8 +100,8 @@ Log each experiment to `results.tsv` (tab-separated):
 
 ```text
 commit	efficiency_score	combined_us	parse_us	render_us	allocations	status	description
-a1b2c3d	1.000000	18032	4585	13447	24530	keep	original baseline from PR #2056 head
-b2c3d4e	2.868395	6141	3329	2812	24174	keep	date filter cache with mixed-case dynamic-keyword safety
+a1b2c3d	1.000000	13918	3545	10373	24530	keep	recomputed PR baseline on this machine
+b2c3d4e	2.188250	6454	3505	2949	24174	keep	date filter cache with mixed-case dynamic-keyword safety
 c3d4e5f	ERROR	ERROR	0	0	0	crash	broken tokenizer edge case
 ```
 
