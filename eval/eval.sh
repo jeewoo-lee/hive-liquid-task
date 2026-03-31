@@ -126,8 +126,11 @@ for i in 1 2 3; do
     fi
 done
 
-BASELINE_COMBINED_US=18032
-BASELINE_ALLOCATIONS=24530
-EFFICIENCY_SCORE="$(awk -v bc="$BASELINE_COMBINED_US" -v ba="$BASELINE_ALLOCATIONS" -v cu="$BEST_COMBINED" -v al="$BEST_ALLOC" 'BEGIN { printf "%.6f", (bc * ba) / (cu * al) }')"
+# Normalize to the PR-head baseline used for this task on this machine,
+# not Shopify main. The task starts from PR #2056 head, so score 1.0 means
+# "matching the starting PR baseline under this eval environment".
+PR_BASELINE_COMBINED_US=18032
+PR_BASELINE_ALLOCATIONS=24530
+EFFICIENCY_SCORE="$(awk -v bc="$PR_BASELINE_COMBINED_US" -v ba="$PR_BASELINE_ALLOCATIONS" -v cu="$BEST_COMBINED" -v al="$BEST_ALLOC" 'BEGIN { printf "%.6f", (bc * ba) / (cu * al) }')"
 
 summary "$EFFICIENCY_SCORE" "$BEST_COMBINED" "$BEST_PARSE" "$BEST_RENDER" "$BEST_ALLOC" "$CORRECT" "$TOTAL" "true"

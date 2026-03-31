@@ -24,7 +24,7 @@ This task uses the exact benchmark family cited in Shopify/liquid PR #2056: `per
 
 The benchmark reports one score plus four raw numbers:
 
-- `efficiency_score` — composite score that rewards lower `combined_us` and lower `allocations` together. Higher is better. The original task baseline is normalized to `1.0`.
+- `efficiency_score` — composite score that rewards lower `combined_us` and lower `allocations` together. Higher is better. The PR-head task baseline is normalized to `1.0`.
 - `combined_us` — parse + render time in microseconds for the best run. Lower is better.
 - `parse_us` — parse-only time in microseconds for the best run.
 - `render_us` — render-only time in microseconds for the best run.
@@ -58,14 +58,16 @@ Only compare scores produced on the same environment.
 `efficiency_score` is defined as:
 
 ```text
-(baseline_combined_us * baseline_allocations) / (combined_us * allocations)
+(pr_baseline_combined_us * pr_baseline_allocations) / (combined_us * allocations)
 ```
 
-with `baseline_combined_us = 18032` and `baseline_allocations = 24530`.
+with `pr_baseline_combined_us = 18032` and `pr_baseline_allocations = 24530`.
+
+These are the verified local numbers for the PR-head starting point used by this task. They are intentionally **not** the Shopify `main` numbers from the PR summary, because agents start from the PR branch, not from `main`.
 
 This means:
 
-- `1.0` = matches the original task baseline
+- `1.0` = matches the PR-head starting point for this task
 - `> 1.0` = better than baseline
 - a run only scores highly if it improves time and allocations together
 
