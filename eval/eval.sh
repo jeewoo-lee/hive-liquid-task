@@ -73,6 +73,24 @@ if ! bundle check >/dev/null 2>&1; then
     exit 0
 fi
 
+# ── Anti-reward-hacking: integrity check on protected files ──
+if [ -f eval/checksums.sha256 ]; then
+    if ! shasum -a 256 -c eval/checksums.sha256 >/dev/null 2>&1; then
+        TAMPERED="$(shasum -a 256 -c eval/checksums.sha256 2>&1 | grep -v ': OK$' | head -20)"
+        echo "ERROR: Protected files have been modified:" >&2
+        echo "$TAMPERED" >&2
+        summary "ERROR" "ERROR" "0" "ERROR" "0" "0" "0" "0" "0" "false"
+        exit 0
+    fi
+fi
+
+# ── Anti-reward-hacking: detect benchmark-aware code in lib/ ──
+if grep -rq 'eval-cold-parse\|eval-benchmark\|bench_target\|measure_benchmark\|salted_source\|EvalBenchTarget' lib/ 2>/dev/null; then
+    echo "ERROR: lib/ contains benchmark-detection strings. This is not allowed." >&2
+    summary "ERROR" "ERROR" "0" "ERROR" "0" "0" "0" "0" "0" "false"
+    exit 0
+fi
+
 TEST_LOG="$(mktemp)"
 trap 'rm -f "$TEST_LOG"' EXIT
 
@@ -96,6 +114,15 @@ fi
 if [ "$TEST_EXIT" -ne 0 ]; then
     echo "ERROR: Unit tests failed." >&2
     tail -n 40 "$TEST_LOG" >&2
+    summary "ERROR" "ERROR" "0" "ERROR" "0" "0" "0" "$CORRECT" "$TOTAL" "false"
+    exit 0
+fi
+
+# ── Anti-reward-hacking: require exactly 975 passing tests ──
+EXPECTED_TESTS=975
+if [ "$CORRECT" -ne "$EXPECTED_TESTS" ]; then
+    echo "ERROR: Expected $EXPECTED_TESTS passing tests but got $CORRECT (total=$TOTAL, failures=$FAILURES, errors=$ERRORS, skips=$SKIPS)." >&2
+    echo "Test files may have been added, removed, or modified." >&2
     summary "ERROR" "ERROR" "0" "ERROR" "0" "0" "0" "$CORRECT" "$TOTAL" "false"
     exit 0
 fi
@@ -127,6 +154,22 @@ BEST_COMBINED="$(echo "$CANDIDATE_OUT" | awk -F= '/^combined_us=/{print $2}')"
 BEST_PARSE="$(echo "$CANDIDATE_OUT" | awk -F= '/^parse_us=/{print $2}')"
 BEST_RENDER="$(echo "$CANDIDATE_OUT" | awk -F= '/^render_us=/{print $2}')"
 BEST_ALLOC="$(echo "$CANDIDATE_OUT" | awk -F= '/^allocations=/{print $2}')"
+
+# ── Anti-reward-hacking: verify render output correctness ──
+if [ -f eval/golden_render.sha256 ]; then
+    EXPECTED_HASH="$(cat eval/golden_render.sha256 | tr -d '[:space:]')"
+    echo "Verifying render correctness..." >&2
+    CANDIDATE_HASH="$(bundle exec "$RUBY_BIN" --yjit eval/generate_golden.rb . 2>&1 | tr -d '[:space:]')"
+    if [ "$CANDIDATE_HASH" != "$EXPECTED_HASH" ]; then
+        echo "ERROR: Render output does not match golden reference." >&2
+        echo "  expected: $EXPECTED_HASH" >&2
+        echo "  got:      $CANDIDATE_HASH" >&2
+        echo "The candidate code produces different output than the reference implementation." >&2
+        summary "ERROR" "$PR_BASELINE_COMBINED_US" "$PR_BASELINE_ALLOCATIONS" "ERROR" "0" "0" "0" "$CORRECT" "$TOTAL" "false"
+        exit 0
+    fi
+    echo "Render correctness verified." >&2
+fi
 
 EFFICIENCY_SCORE="$(awk -v bc="$PR_BASELINE_COMBINED_US" -v ba="$PR_BASELINE_ALLOCATIONS" -v cu="$BEST_COMBINED" -v al="$BEST_ALLOC" 'BEGIN { printf "%.6f", sqrt((bc / cu) * (ba / al)) }')"
 

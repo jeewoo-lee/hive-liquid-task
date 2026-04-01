@@ -53,8 +53,10 @@ Only compare scores produced on the same environment.
 - `prepare.sh`
 - `performance/`
 - `test/`
+- `reference-pr/`
 - `.ruby-version`, `Gemfile`, `liquid.gemspec`, `Rakefile`
 - No whole-document memoization keyed by full template source, template name, or file path. The task is about making Liquid itself faster, not skipping repeated compiles via benchmark-specific caches.
+- No benchmark-detection code: `lib/` must not reference eval internals (salt patterns, benchmark harness names, etc.).
 
 **The goal: maximize `efficiency_score`.** Correctness is a hard gate: if any of the 975 tests fail, the run is invalid.
 
