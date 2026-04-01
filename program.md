@@ -20,7 +20,7 @@ Optimize Shopify Liquid's parser and renderer to maximize `efficiency_score` on 
 
 ## The benchmark
 
-This task uses the exact benchmark family cited in Shopify/liquid PR #2056: `performance/bench_quick.rb` on ThemeRunner, which renders real Shopify-like theme templates with production-style data. The eval first runs the 975-test base suite, then runs `bench_quick.rb` three times with `--yjit` and keeps the best combined parse+render time.
+This task uses the exact benchmark family cited in Shopify/liquid PR #2056: ThemeRunner over real Shopify-like theme templates and production-style data. The eval first runs the 975-test base suite, then runs a fixed eval-owned benchmark three times with `--yjit` and keeps the best combined parse+render time.
 
 The benchmark reports one score plus four raw numbers:
 
@@ -36,6 +36,7 @@ Reference points:
 - The task carries a `reference-pr/` snapshot of Shopify/liquid PR #2056 head.
 - On every eval, the scorer reruns that `reference-pr/` benchmark on the current machine to establish a fresh PR baseline before benchmarking the candidate.
 - This makes `efficiency_score` machine-local: the PR baseline for that machine is always `1.0`.
+- The parse side of the benchmark uses salted template variants on every timed iteration so whole-document parse caches cannot turn repeated compiles into cache hits.
 
 Only compare scores produced on the same environment.
 
@@ -53,13 +54,17 @@ Only compare scores produced on the same environment.
 - `performance/`
 - `test/`
 - `.ruby-version`, `Gemfile`, `liquid.gemspec`, `Rakefile`
+- No whole-document memoization keyed by full template source, template name, or file path. The task is about making Liquid itself faster, not skipping repeated compiles via benchmark-specific caches.
 
 **The goal: maximize `efficiency_score`.** Correctness is a hard gate: if any of the 975 tests fail, the run is invalid.
 
-`efficiency_score` is defined as:
+`efficiency_score` is defined as the geometric mean of the latency-improvement ratio and the allocation-improvement ratio:
 
 ```text
-(pr_baseline_combined_us_for_this_machine * pr_baseline_allocations_for_this_machine) / (combined_us * allocations)
+sqrt(
+  (pr_baseline_combined_us_for_this_machine / combined_us) *
+  (pr_baseline_allocations_for_this_machine / allocations)
+)
 ```
 
 where `pr_baseline_combined_us_for_this_machine` and `pr_baseline_allocations_for_this_machine` are freshly measured from `reference-pr/` during the same eval run.
@@ -69,6 +74,8 @@ This means:
 - `1.0` = matches the PR-head starting point for this task
 - `> 1.0` = better than baseline
 - a run only scores highly if it improves time and allocations together
+- very lopsided gains are damped compared with a raw product score
+- parse-result caches that make repeated identical compiles trivial are explicitly out of scope
 
 **Simplicity criterion**: all else being equal, simpler changes are better.
 
@@ -82,13 +89,13 @@ The eval prints a machine-local summary like:
 
 ```text
 ---
-efficiency_score: 2.188250
-pr_baseline_combined_us: 13918
-pr_baseline_allocations: 24530
-combined_us:      6454
-parse_us:         3505
-render_us:        2949
-allocations:      24174
+efficiency_score: 1.449240
+pr_baseline_combined_us: 13478
+pr_baseline_allocations: 25792
+combined_us:      6507
+parse_us:         3572
+render_us:        2935
+allocations:      25436
 correct:          975
 total:            975
 valid:            true
@@ -100,8 +107,8 @@ Log each experiment to `results.tsv` (tab-separated):
 
 ```text
 commit	efficiency_score	combined_us	parse_us	render_us	allocations	status	description
-a1b2c3d	1.000000	13918	3545	10373	24530	keep	recomputed PR baseline on this machine
-b2c3d4e	2.188250	6454	3505	2949	24174	keep	date filter cache with mixed-case dynamic-keyword safety
+a1b2c3d	1.000000	13478	3596	9882	25792	keep	recomputed PR baseline on this machine
+b2c3d4e	1.449240	6507	3572	2935	25436	keep	date filter cache with mixed-case dynamic-keyword safety
 c3d4e5f	ERROR	ERROR	0	0	0	crash	broken tokenizer edge case
 ```
 
@@ -118,7 +125,7 @@ c3d4e5f	ERROR	ERROR	0	0	0	crash	broken tokenizer edge case
 
 LOOP FOREVER:
 
-1. **THINK** — inspect `results.tsv`, the hot paths in `lib/`, and the benchmark harness. Focus on parse and render allocations first.
+1. **THINK** — inspect `results.tsv`, the hot paths in `lib/`, and the benchmark harness. Focus on real parser, tokenizer, render-loop, and allocation improvements rather than memoizing whole templates.
 2. Modify files under `lib/`.
 3. git commit
 4. Run: `bash eval/eval.sh > run.log 2>&1`

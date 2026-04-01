@@ -17,7 +17,7 @@ BEST_RENDER=0
 BEST_ALLOC=0
 
 for i in 1 2 3; do
-    OUT="$(bundle exec ruby --yjit "$TARGET_ROOT/performance/bench_quick.rb" 2>&1)"
+    OUT="$(bundle exec ruby --yjit eval/bench_target.rb "$TARGET_ROOT" 2>&1)"
     PARSE_US="$(echo "$OUT" | awk -F= '/^parse_us=/{print $2}' | tail -1)"
     RENDER_US="$(echo "$OUT" | awk -F= '/^render_us=/{print $2}' | tail -1)"
     COMBINED_US="$(echo "$OUT" | awk -F= '/^combined_us=/{print $2}' | tail -1)"

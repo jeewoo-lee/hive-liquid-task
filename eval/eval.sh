@@ -128,6 +128,6 @@ BEST_PARSE="$(echo "$CANDIDATE_OUT" | awk -F= '/^parse_us=/{print $2}')"
 BEST_RENDER="$(echo "$CANDIDATE_OUT" | awk -F= '/^render_us=/{print $2}')"
 BEST_ALLOC="$(echo "$CANDIDATE_OUT" | awk -F= '/^allocations=/{print $2}')"
 
-EFFICIENCY_SCORE="$(awk -v bc="$PR_BASELINE_COMBINED_US" -v ba="$PR_BASELINE_ALLOCATIONS" -v cu="$BEST_COMBINED" -v al="$BEST_ALLOC" 'BEGIN { printf "%.6f", (bc * ba) / (cu * al) }')"
+EFFICIENCY_SCORE="$(awk -v bc="$PR_BASELINE_COMBINED_US" -v ba="$PR_BASELINE_ALLOCATIONS" -v cu="$BEST_COMBINED" -v al="$BEST_ALLOC" 'BEGIN { printf "%.6f", sqrt((bc / cu) * (ba / al)) }')"
 
 summary "$EFFICIENCY_SCORE" "$PR_BASELINE_COMBINED_US" "$PR_BASELINE_ALLOCATIONS" "$BEST_COMBINED" "$BEST_PARSE" "$BEST_RENDER" "$BEST_ALLOC" "$CORRECT" "$TOTAL" "true"
