@@ -91,6 +91,20 @@ if grep -rq 'eval-cold-parse\|eval-benchmark\|bench_target\|measure_benchmark\|s
     exit 0
 fi
 
+# ── Anti-reward-hacking: detect stdlib monkey-patching in lib/ ──
+if grep -rqE 'Process\..*define_method|ObjectSpace\..*define_method|class\s+<<\s*(Process|ObjectSpace|GC)\b|Process\.class_eval|ObjectSpace\.class_eval|GC\.class_eval|(Process|ObjectSpace|GC)\.(send|define_method|prepend|include)|def\s+(clock_gettime|count_objects)\b|EVAL_CLOCK|EVAL_COUNT_OBJECTS|EVAL_GC_' lib/ 2>/dev/null; then
+    echo "ERROR: lib/ contains stdlib monkey-patching. This is not allowed." >&2
+    summary "ERROR" "ERROR" "0" "ERROR" "0" "0" "0" "0" "0" "false"
+    exit 0
+fi
+
+# ── Anti-reward-hacking: detect reading benchmark data from lib/ ──
+if grep -rqE 'performance/tests|performance/shopify|bench_quick|vision\.database' lib/ 2>/dev/null; then
+    echo "ERROR: lib/ references benchmark data files. This is not allowed." >&2
+    summary "ERROR" "ERROR" "0" "ERROR" "0" "0" "0" "0" "0" "false"
+    exit 0
+fi
+
 TEST_LOG="$(mktemp)"
 trap 'rm -f "$TEST_LOG"' EXIT
 

@@ -1,5 +1,16 @@
 # frozen_string_literal: true
 
+# ── Capture pristine stdlib methods BEFORE loading target code ──
+# This prevents agents from monkey-patching timing/allocation/GC functions
+# in lib/ to fake benchmark results.
+require "objspace"
+EVAL_CLOCK = Process.method(:clock_gettime)
+EVAL_COUNT_OBJECTS = ObjectSpace.method(:count_objects)
+EVAL_GC_START = GC.method(:start)
+EVAL_GC_COMPACT = GC.respond_to?(:compact) ? GC.method(:compact) : nil
+EVAL_GC_DISABLE = GC.method(:disable)
+EVAL_GC_ENABLE = GC.method(:enable)
+
 target_root = File.expand_path(ARGV.fetch(0))
 $LOAD_PATH.unshift(File.join(target_root, "lib"))
 load File.join(target_root, "performance/theme_runner.rb")
@@ -107,25 +118,25 @@ pre_warmup_state = EvalBenchTarget.snapshot_liquid_state
   end
 end
 
-GC.start
-GC.compact if GC.respond_to?(:compact)
+EVAL_GC_START.call
+EVAL_GC_COMPACT.call if EVAL_GC_COMPACT
 
 # Restore pre-warmup state: clears any caches populated during warmup
 EvalBenchTarget.restore_liquid_state(pre_warmup_state)
 
 parse_times = []
 10.times do |iter|
-  GC.disable
-  t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  EVAL_GC_DISABLE.call
+  t0 = EVAL_CLOCK.call(Process::CLOCK_MONOTONIC)
   tests.each_with_index do |test_hash, idx|
     salt = "parse-#{iter}-#{idx}"
     Liquid::Template.new.parse(EvalBenchTarget.salted_source(test_hash[:liquid], salt))
     layout = test_hash[:layout]
     Liquid::Template.new.parse(EvalBenchTarget.salted_source(layout, salt)) if layout
   end
-  t1 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-  GC.enable
-  GC.start
+  t1 = EVAL_CLOCK.call(Process::CLOCK_MONOTONIC)
+  EVAL_GC_ENABLE.call
+  EVAL_GC_START.call
   parse_times << (t1 - t0) * 1_000_000
 end
 
@@ -134,22 +145,21 @@ EvalBenchTarget.restore_liquid_state(pre_warmup_state)
 
 render_times = []
 10.times do
-  GC.disable
-  t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  EVAL_GC_DISABLE.call
+  t0 = EVAL_CLOCK.call(Process::CLOCK_MONOTONIC)
   runner.render
-  t1 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-  GC.enable
-  GC.start
+  t1 = EVAL_CLOCK.call(Process::CLOCK_MONOTONIC)
+  EVAL_GC_ENABLE.call
+  EVAL_GC_START.call
   render_times << (t1 - t0) * 1_000_000
 end
 
 # Restore state before allocation measurement
 EvalBenchTarget.restore_liquid_state(pre_warmup_state)
 
-require "objspace"
-GC.start
-GC.disable
-before = ObjectSpace.count_objects.values_at(:TOTAL).first - ObjectSpace.count_objects.values_at(:FREE).first
+EVAL_GC_START.call
+EVAL_GC_DISABLE.call
+before = EVAL_COUNT_OBJECTS.call.values_at(:TOTAL).first - EVAL_COUNT_OBJECTS.call.values_at(:FREE).first
 runner.send(:each_test) do |liquid, layout, assigns, page_template, template_name|
   salt = "alloc-#{template_name}"
   compiled = runner.send(
@@ -162,8 +172,8 @@ runner.send(:each_test) do |liquid, layout, assigns, page_template, template_nam
   )
   runner.send(:render_layout, compiled[:tmpl], compiled[:layout], compiled[:assigns])
 end
-after = ObjectSpace.count_objects.values_at(:TOTAL).first - ObjectSpace.count_objects.values_at(:FREE).first
-GC.enable
+after = EVAL_COUNT_OBJECTS.call.values_at(:TOTAL).first - EVAL_COUNT_OBJECTS.call.values_at(:FREE).first
+EVAL_GC_ENABLE.call
 
 parse_us = parse_times.min.round(0)
 render_us = render_times.min.round(0)
